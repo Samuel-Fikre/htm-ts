@@ -6,3 +6,8 @@ dist
 mini
 yarn.lock
 htm.tgz
+
+# AI Skills and Agents
+.agents/
+.cursor/
+skills/
