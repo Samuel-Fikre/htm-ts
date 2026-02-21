@@ -1,6 +1,5 @@
 import { VNode, Child, Component } from './types.js';
 
-// https://t.me/c/3675081545/8
 const enum Mode {
     Slash = 0,
     Text = 1,
@@ -60,7 +59,6 @@ export function h(
  * Zero-recursion, strictly typed, and supports the new VNode interface.
  */
 
-// https://t.me/c/3675081545/9
 export function html(statics: TemplateStringsArray, ...fields: any[]): VNode | Child[] | Child {
     let mode: Mode = Mode.Text;
     let buffer = '';
@@ -69,7 +67,6 @@ export function html(statics: TemplateStringsArray, ...fields: any[]): VNode | C
     let char: string;
     let propName: string = '';
 
-    // https://t.me/c/3675081545/10
     const commit = (fieldIndex?: number): void => {
         if (mode === Mode.Text && (fieldIndex !== undefined || (buffer = buffer.replace(/^\s*\n\s*|\s*\n\s*$/g, '')))) {
             current.push(fieldIndex !== undefined ? fields[fieldIndex - 1] : buffer);
@@ -92,7 +89,6 @@ export function html(statics: TemplateStringsArray, ...fields: any[]): VNode | C
         buffer = '';
     };
 
-    // https://t.me/c/3675081545/11
     for (let i = 0; i < statics.length; i++) {
         if (i) {
             if (mode === Mode.Text) commit();
