@@ -1,5 +1,29 @@
 import { VNode, Child, Component } from './types.js';
 
+// Core Reactivity System
+let context: (() => void) | null = null;
+
+export function signal<T>(value: T): [() => T, (v: T) => void] {
+    const subscriptions = new Set<() => void>();
+    return [
+        () => {
+            if (context) subscriptions.add(context);
+            return value;
+        },
+        (newValue: T) => {
+            value = newValue;
+            subscriptions.forEach(fn => fn());
+        }
+    ];
+}
+
+export function effect(fn: () => void) {
+    context = fn;
+    fn();
+    context = null;
+}
+
+
 const enum Mode {
     Slash = 0,
     Text = 1,
@@ -173,8 +197,15 @@ function renderChild(child: Child, parent: Node): void {
     }
 
     if (typeof child === 'function') {
-        const value = (child as Function)();
-        renderChild(value, parent);
+        // Create a stable marker in the DOM for this signal
+        const textNode = document.createTextNode("");
+        parent.appendChild(textNode);
+
+        // Subscribe to changes
+        effect(() => {
+            const value = (child as Function)();
+            textNode.textContent = value == null ? "" : String(value);
+        });
         return;
     }
 
