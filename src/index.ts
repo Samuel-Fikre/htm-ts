@@ -12,10 +12,6 @@ const enum Mode {
 
 /**
  * HyperScript function to create a VNode POJO.
- * Optimizations:
- * - Iterative flattening (zero recursion) to reduce GC.
- * - Key extraction from props to VNode top level.
- * - Explicitly preserves `0` as a valid child.
  */
 export function h(
     type: string | Component<any>,
@@ -56,9 +52,8 @@ export function h(
 
 /**
  * Modernized htm parser logic.
- * Zero-recursion, strictly typed, and supports the new VNode interface.
+ * Zero-recursion, strictly typed, and corrected for nested/self-closing tags.
  */
-
 export function html(statics: TemplateStringsArray, ...fields: any[]): VNode | Child[] | Child {
     let mode: Mode = Mode.Text;
     let buffer = '';
@@ -130,8 +125,13 @@ export function html(statics: TemplateStringsArray, ...fields: any[]): VNode | C
                 buffer = '';
             } else if (char === '/' && (mode < Mode.PropSet || statics[i][j + 1] === '>')) {
                 commit();
+                // htm mini closing tag logic:
+                // 1. If we are in TagName, we are closing a tag (e.g. </div)
+                if (mode === Mode.TagName) {
+                    current = current[0]; // Pop the empty TagName array
+                }
                 const nodeState = current;
-                current = current[0];
+                current = current[0]; // Pop back to parent
                 current.push(h(nodeState[1], nodeState[2], ...nodeState.slice(3)));
                 mode = Mode.Slash;
             } else if (char === ' ' || char === '\t' || char === '\n' || char === '\r') {
@@ -150,4 +150,82 @@ export function html(statics: TemplateStringsArray, ...fields: any[]): VNode | C
     commit();
 
     return current.length > 2 ? current.slice(1) : current[1];
+}
+
+/**
+ * Render a VNode or Child into a DOM parent.
+ */
+export function render(vnode: VNode | Child | Child[], parent: Node): void {
+    if (parent instanceof Element && parent.childNodes.length > 0) {
+        parent.textContent = '';
+    }
+
+    const children = Array.isArray(vnode) ? vnode : [vnode];
+
+    for (const child of children) {
+        renderChild(child, parent);
+    }
+}
+
+function renderChild(child: Child, parent: Node): void {
+    if (child == null || child === false || child === true) {
+        return;
+    }
+
+    if (typeof child === 'function') {
+        const value = (child as Function)();
+        renderChild(value, parent);
+        return;
+    }
+
+    if (typeof child === 'string' || typeof child === 'number') {
+        parent.appendChild(document.createTextNode(String(child)));
+        return;
+    }
+
+    const { type, props, children } = child as VNode;
+
+    // Safety Guard for Fragments / empty tags
+    if (!type) {
+        if (children) {
+            for (const vchild of children) {
+                renderChild(vchild, parent);
+            }
+        }
+        return;
+    }
+
+    if (typeof type === 'function') {
+        const componentVNode = type(props || {});
+        renderChild(componentVNode, parent);
+        return;
+    }
+
+    const dom = document.createElement(type);
+
+    if (props) {
+        for (const prop in props) {
+            const value = props[prop];
+            if (prop === 'key') continue;
+
+            // DOM Property Heuristics & Boolean Attribute Handling
+            if (prop in dom && prop !== 'style' && prop !== 'list' && prop !== 'form' && prop !== 'type') {
+                (dom as any)[prop] = value === null ? '' : value;
+            } else {
+                if (value === false || value == null) {
+                    dom.removeAttribute(prop);
+                } else {
+                    dom.setAttribute(prop, String(value));
+                }
+            }
+        }
+    }
+
+    if (children) {
+        for (const vchild of children) {
+            renderChild(vchild, dom);
+        }
+    }
+
+    parent.appendChild(dom);
 }
