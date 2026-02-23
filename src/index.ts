@@ -1,6 +1,33 @@
-import { VNode, Child, Component } from './types.js';
+import { VNode, Child, Component, HTMLElements, Bindable } from './types.js';
 
-// Core Reactivity System
+type ExtractTagName<S extends string> =
+    S extends `${infer Name} ${string}` ? Name :
+    S extends `${infer Name}/${string}` ? Name :
+    S;
+
+// Validate tags within a single static string segment.
+// Uses `>` as delimiter per tail-recursive-generics skill.
+type ValidateSegment<S extends string> =
+    S extends `${string}<${infer TagContent}>${infer Rest}`
+    ? TagContent extends `/${string}` ? ValidateSegment<Rest>  // closing tag
+    : TagContent extends `!${string}` ? ValidateSegment<Rest>  // comment
+    : ExtractTagName<TagContent> extends HTMLElements ? ValidateSegment<Rest>
+    : ExtractTagName<TagContent> extends "" ? ValidateSegment<Rest>
+    : `Error: <${ExtractTagName<TagContent>}> is not a valid HTML element`
+    : true;
+
+// Walk each segment of the template strings array (tail-recursive accumulator)
+type ValidateEach<T extends readonly string[]> =
+    T extends readonly [infer Head, ...infer Tail]
+    ? Head extends string
+    ? ValidateSegment<Head> extends true
+    ? Tail extends readonly string[]
+    ? ValidateEach<Tail>
+    : true
+    : ValidateSegment<Head>  // Return the error
+    : true
+    : true;
+
 let context: (() => void) | null = null;
 
 export function signal<T>(value: T): [() => T, (v: T) => void] {
@@ -23,15 +50,8 @@ export function effect(fn: () => void) {
     context = null;
 }
 
-
 const enum Mode {
-    Slash = 0,
-    Text = 1,
-    Whitespace = 2,
-    TagName = 3,
-    Comment = 4,
-    PropSet = 5,
-    PropAppend = 6,
+    Slash = 0, Text = 1, Whitespace = 2, TagName = 3, Comment = 4, PropSet = 5, PropAppend = 6,
 }
 
 /**
@@ -56,14 +76,12 @@ export function h(
             results.push(item);
         } else if (item === null || item === undefined) {
             results.push(null);
+        } else if (typeof item === 'object' && 'type' in item) {
+            results.push(item as VNode);
         }
     }
 
-    const vnode: VNode = {
-        type,
-        props,
-        children: results,
-    };
+    const vnode: VNode = { type, props, children: results };
 
     if (props && props.key !== undefined) {
         vnode.key = props.key;
@@ -78,7 +96,7 @@ export function h(
  * Modernized htm parser logic.
  * Zero-recursion, strictly typed, and corrected for nested/self-closing tags.
  */
-export function html(statics: TemplateStringsArray, ...fields: any[]): VNode | Child[] | Child {
+function _html<T extends any[]>(statics: TemplateStringsArray, ...fields: T): VNode | Child[] | Child {
     let mode: Mode = Mode.Text;
     let buffer = '';
     let quote = '';
@@ -149,13 +167,9 @@ export function html(statics: TemplateStringsArray, ...fields: any[]): VNode | C
                 buffer = '';
             } else if (char === '/' && (mode < Mode.PropSet || statics[i][j + 1] === '>')) {
                 commit();
-                // htm mini closing tag logic:
-                // 1. If we are in TagName, we are closing a tag (e.g. </div)
-                if (mode === Mode.TagName) {
-                    current = current[0]; // Pop the empty TagName array
-                }
+                if (mode === Mode.TagName) current = current[0];
                 const nodeState = current;
-                current = current[0]; // Pop back to parent
+                current = current[0];
                 current.push(h(nodeState[1], nodeState[2], ...nodeState.slice(3)));
                 mode = Mode.Slash;
             } else if (char === ' ' || char === '\t' || char === '\n' || char === '\r') {
@@ -176,6 +190,16 @@ export function html(statics: TemplateStringsArray, ...fields: any[]): VNode | C
     return current.length > 2 ? current.slice(1) : current[1];
 }
 
+export function html(strings: TemplateStringsArray, ...values: any[]): VNode {
+    return _html(strings, ...values) as VNode;
+}
+
+// Branded error type for type-level validation
+type TemplateError<Msg extends string> = { readonly __templateError: Msg };
+
+// Export validation types for standalone type checking
+export type { ValidateSegment, ValidateEach, ExtractTagName, TemplateError };
+
 /**
  * Render a VNode or Child into a DOM parent.
  */
@@ -192,16 +216,11 @@ export function render(vnode: VNode | Child | Child[], parent: Node): void {
 }
 
 function renderChild(child: Child, parent: Node): void {
-    if (child == null || child === false || child === true) {
-        return;
-    }
+    if (child == null || child === false || child === true) return;
 
     if (typeof child === 'function') {
-        // Create a stable marker in the DOM for this signal
         const textNode = document.createTextNode("");
         parent.appendChild(textNode);
-
-        // Subscribe to changes
         effect(() => {
             const value = (child as Function)();
             textNode.textContent = value == null ? "" : String(value);
@@ -214,49 +233,64 @@ function renderChild(child: Child, parent: Node): void {
         return;
     }
 
+    if (child instanceof Node) {
+        parent.appendChild(child);
+        return;
+    }
+
     const { type, props, children } = child as VNode;
 
-    // Safety Guard for Fragments / empty tags
     if (!type) {
         if (children) {
-            for (const vchild of children) {
-                renderChild(vchild, parent);
-            }
+            for (const vchild of children) renderChild(vchild, parent);
         }
         return;
     }
 
     if (typeof type === 'function') {
-        const componentVNode = type(props || {});
-        renderChild(componentVNode, parent);
+        renderChild(type(props || {}), parent);
         return;
     }
 
     const dom = document.createElement(type);
 
     if (props) {
-        for (const prop in props) {
-            const value = props[prop];
-            if (prop === 'key') continue;
+        for (const [name, value] of Object.entries(props)) {
+            if (name === 'key') continue;
 
-            // DOM Property Heuristics & Boolean Attribute Handling
-            if (prop in dom && prop !== 'style' && prop !== 'list' && prop !== 'form' && prop !== 'type') {
-                (dom as any)[prop] = value === null ? '' : value;
+            const isEvent = name.startsWith('on');
+
+            if (typeof value === 'function' && !isEvent) {
+                effect(() => {
+                    updateAttribute(dom as HTMLElement, name, (value as Function)());
+                });
             } else {
-                if (value === false || value == null) {
-                    dom.removeAttribute(prop);
-                } else {
-                    dom.setAttribute(prop, String(value));
-                }
+                updateAttribute(dom as HTMLElement, name, value);
             }
         }
     }
 
     if (children) {
-        for (const vchild of children) {
-            renderChild(vchild, dom);
-        }
+        for (const vchild of children) renderChild(vchild, dom);
     }
 
     parent.appendChild(dom);
+}
+
+function updateAttribute(el: HTMLElement, name: string, value: any) {
+    if (name.startsWith('on')) {
+        (el as any)[name] = value;
+    } else if (name === 'style' && typeof value === 'object' && value !== null) {
+        Object.assign(el.style, value);
+    } else if (name === 'class') {
+        el.className = String(value || '');
+    } else if (name in el && name !== 'list' && name !== 'form' && name !== 'type') {
+        (el as Record<string, any>)[name] = value == null ? '' : value;
+    } else {
+        if (value == null || value === false) {
+            el.removeAttribute(name);
+        } else {
+            el.setAttribute(name, String(value));
+        }
+    }
 }
