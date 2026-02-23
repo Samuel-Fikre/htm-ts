@@ -23,6 +23,7 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest --run",
     "test:watch": "vitest --watch",
+    "test:dist": "pnpm run build && node -e \"import('./dist/index.js').then(() => console.log('Dist build is importable!')).catch((err) => { console.error(err); process.exit(1); })\"",
     "prepublishOnly": "npm run build"
   },
   "keywords": [
