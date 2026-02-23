@@ -79,3 +79,4 @@ Or using npm:
 npm install htm-ts
 ```
 
+[![Open in StackBlitz](https://developer.stackblitz.com/img/open_in_stackblitz.svg)](https://stackblitz.com/github/Samuel-Fikre/htm-ts?file=index.html,main.ts)
