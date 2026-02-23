@@ -1,8 +1,8 @@
 {
   "name": "htm-ts",
-  "version": "1.0.0",
+  "version": "0.0.2",
   "type": "module",
-  "description": "A reactive, type-safe tagged template engine for building DOM with signals and fine-grained updates.",
+  "description": "Surgically reactive, type-safe tagged template engine with signals and fine-grained updates.",
   "main": "./dist/index.cjs",
   "module": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -14,8 +14,7 @@
     }
   },
   "files": [
-    "dist",
-    "src"
+    "dist"
   ],
   "scripts": {
     "build": "tsup",
@@ -23,19 +22,18 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest --run",
     "test:watch": "vitest --watch",
-    "test:dist": "pnpm run build && node -e \"import('./dist/index.js').then(() => console.log('Dist build is importable!')).catch((err) => { console.error(err); process.exit(1); })\"",
-    "prepublishOnly": "npm run build"
+    "test:dist": "pnpm build && node -e \"import('./dist/index.js').then(() => console.log('✅ Dist build importable!'))\"",
+    "prepublishOnly": "pnpm test && pnpm build"
   },
   "keywords": [
     "reactive",
     "signals",
-    "tagged-template",
-    "template-literals",
-    "virtual-dom",
-    "hyperscript",
+    "htm",
+    "tagged-templates",
     "fine-grained",
     "typescript",
-    "dom"
+    "no-vdom",
+    "surgical"
   ],
   "author": "Samuel Fikre",
   "license": "MIT",
