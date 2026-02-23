@@ -21,6 +21,8 @@
     "build": "tsup",
     "dev": "vite",
     "typecheck": "tsc --noEmit",
+    "test": "vitest --run",
+    "test:watch": "vitest --watch",
     "prepublishOnly": "npm run build"
   },
   "keywords": [
@@ -42,8 +44,11 @@
   },
   "homepage": "https://github.com/Samuel-Fikre/htm-ts",
   "devDependencies": {
+    "@vitest/coverage-v8": "^4.0.18",
+    "jsdom": "^28.1.0",
     "tsup": "^8.5.1",
     "typescript": "^5.9.3",
-    "vite": "^7.3.1"
+    "vite": "^7.3.1",
+    "vitest": "^4.0.18"
   }
 }
