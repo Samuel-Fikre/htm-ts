@@ -7,24 +7,28 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        # Node 22 and 24 are the professional standards in 2026
         node-version: [22.x, 24.x]
     steps:
       - name: Checkout
-        uses: actions/checkout@v4 # Modern version for 2026
+        uses: actions/checkout@v4
         
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4 
+        with:
+          version: 9 
+
       - name: Use Node.js ${{ matrix.node-version }}
-        uses: actions/setup-node@v4 # Modern version for 2026
+        uses: actions/setup-node@v4
         with:
           node-version: ${{ matrix.node-version }}
-          cache: 'npm' # Speeds up your build by caching node_modules
+          cache: 'pnpm' 
           
       - name: Install
-        run: npm ci # 'ci' is faster and more reliable than 'install' in GitHub
+        run: pnpm install --frozen-lockfile 
         
       - name: Build and Test
-        run: npm test
+        run: pnpm test
         
       - if: matrix.node-version == '24.x'
         name: ESM Dist Test
-        run: npm run test:dist
+        run: pnpm run test:dist
