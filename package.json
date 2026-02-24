@@ -1,6 +1,6 @@
 {
   "name": "htm-ts",
-  "version": "0.0.2",
+  "version": "0.0.4",
   "type": "module",
   "description": "Surgically reactive, type-safe tagged template engine with signals and fine-grained updates.",
   "main": "./dist/index.cjs",
