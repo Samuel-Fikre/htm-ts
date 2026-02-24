@@ -1,31 +1,36 @@
-import { VNode, Child, Component, HTMLElements, Bindable } from './types.js';
+import { VNode, Child, Component, HTMLElements } from './types.js';
 
-type ExtractTagName<S extends string> =
-    S extends `${infer Name} ${string}` ? Name :
-    S extends `${infer Name}/${string}` ? Name :
-    S;
+/**
+ * Identity helper for strict prop typing.
+ */
+export const p = <T>(props: T): T => props;
+
+type ComponentProps<C> =
+    C extends Component<infer P> ? P :
+    C extends (props: infer P) => any ? P :
+    never;
+
+export type ExtractTagName<S extends string> =
+    S extends `${infer Name}${' ' | '\n' | '\r' | '\t' | '/'}${string}` ? Name : S;
 
 // Validate tags within a single static string segment.
 // Uses `>` as delimiter per tail-recursive-generics skill.
-type ValidateSegment<S extends string> =
+export type ValidateSegment<S extends string> =
     S extends `${string}<${infer TagContent}>${infer Rest}`
-    ? TagContent extends `/${string}` ? ValidateSegment<Rest>  // closing tag
-    : TagContent extends `!${string}` ? ValidateSegment<Rest>  // comment
+    ? TagContent extends `/${string}` ? ValidateSegment<Rest>
+    : TagContent extends `!${string}` ? ValidateSegment<Rest>
     : ExtractTagName<TagContent> extends HTMLElements ? ValidateSegment<Rest>
-    : ExtractTagName<TagContent> extends "" ? ValidateSegment<Rest>
     : `Error: <${ExtractTagName<TagContent>}> is not a valid HTML element`
     : true;
 
 // Walk each segment of the template strings array (tail-recursive accumulator)
-type ValidateEach<T extends readonly string[]> =
+export type ValidateEach<T extends readonly string[]> =
     T extends readonly [infer Head, ...infer Tail]
     ? Head extends string
-    ? ValidateSegment<Head> extends true
-    ? Tail extends readonly string[]
-    ? ValidateEach<Tail>
-    : true
-    : ValidateSegment<Head>  // Return the error
-    : true
+        ? ValidateSegment<Head> extends true
+            ? Tail extends readonly string[] ? ValidateEach<Tail> : true
+            : ValidateSegment<Head>
+        : true
     : true;
 
 let context: (() => void) | null = null;
@@ -103,12 +108,31 @@ function _html<T extends any[]>(statics: TemplateStringsArray, ...fields: T): VN
     let current: any[] = [0];
     let char: string;
     let propName: string = '';
+    let skipFieldIndex: number | null = null;
 
     const commit = (fieldIndex?: number): void => {
         if (mode === Mode.Text && (fieldIndex !== undefined || (buffer = buffer.replace(/^\s*\n\s*|\s*\n\s*$/g, '')))) {
             current.push(fieldIndex !== undefined ? fields[fieldIndex - 1] : buffer);
         } else if (mode === Mode.TagName && (fieldIndex !== undefined || buffer)) {
-            current[1] = fieldIndex !== undefined ? fields[fieldIndex - 1] : buffer;
+            const tag = fieldIndex !== undefined ? fields[fieldIndex - 1] : buffer;
+            current[1] = tag;
+
+            // If the tag is a Component (function), the next field is the props object.
+            if (typeof tag === 'function' && fieldIndex !== undefined) {
+                const potentialProps = fields[fieldIndex];
+                const isPlainObject =
+                    typeof potentialProps === 'object' &&
+                    potentialProps !== null &&
+                    !('type' in (potentialProps as any)) &&
+                    !(potentialProps instanceof Node);
+
+                if (isPlainObject) {
+                    current[2] = potentialProps;
+                    skipFieldIndex = fieldIndex + 1;
+                } else {
+                    current[2] = {};
+                }
+            }
             mode = Mode.Whitespace;
         } else if (mode === Mode.Whitespace && buffer === '...' && fieldIndex !== undefined) {
             current[2] = Object.assign(current[2] || {}, fields[fieldIndex - 1]);
@@ -129,7 +153,11 @@ function _html<T extends any[]>(statics: TemplateStringsArray, ...fields: T): VN
     for (let i = 0; i < statics.length; i++) {
         if (i) {
             if (mode === Mode.Text) commit();
-            commit(i);
+            if (skipFieldIndex !== i) {
+                commit(i);
+            } else {
+                skipFieldIndex = null;
+            }
         }
 
         for (let j = 0; j < statics[i].length; j++) {
@@ -190,15 +218,28 @@ function _html<T extends any[]>(statics: TemplateStringsArray, ...fields: T): VN
     return current.length > 2 ? current.slice(1) : current[1];
 }
 
-export function html(strings: TemplateStringsArray, ...values: any[]): VNode {
-    return _html(strings, ...values) as VNode;
+// Overload 1: Component Usage
+// Forces the structure: html`<${Comp} ${p({...})} />`
+export function html<
+    const S extends readonly string[],
+    C extends (props: any) => any
+>(
+    strings: S & TemplateStringsArray,
+    component: C,
+    props: ComponentProps<C>,
+    ...children: Child[]
+): VNode;
+
+// Overload 2: Plain HTML Usage
+export function html<const S extends readonly string[]>(
+    strings: S & TemplateStringsArray,
+    ...values: Child[]
+): VNode | Child[] | Child;
+
+// implementation
+export function html(strings: TemplateStringsArray, ...values: any[]): any {
+    return _html(strings, ...values);
 }
-
-// Branded error type for type-level validation
-type TemplateError<Msg extends string> = { readonly __templateError: Msg };
-
-// Export validation types for standalone type checking
-export type { ValidateSegment, ValidateEach, ExtractTagName, TemplateError };
 
 /**
  * Render a VNode or Child into a DOM parent.

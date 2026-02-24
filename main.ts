@@ -1,40 +1,38 @@
-import { html, render, signal } from './src/index.js';
+import { html, render, signal, p } from './src/index.js';
 
+// 1. Define a Signal
 const [count, setCount] = signal(0);
 
-// Reactive Style Signal
-const style = () => ({
-  color: count() % 2 === 0 ? '#646cff' : '#ff4646',
-  fontSize: `${2 + count() / 10}rem`,
-  transition: 'all 0.3s ease',
-  display: 'block',
-  marginBottom: '1rem'
-});
+// 2. Define a Typed Component
+interface DisplayProps {
+  value: () => number;
+  label: string;
+}
 
+const CounterDisplay = ({ value, label }: DisplayProps) => {
+  const color = () => value() % 2 === 0 ? '#646cff' : '#ff4646';
+  return html`
+    <div style=${() => `border: 2px solid ${color()}; padding: 1rem; border-radius: 12px; transition: border 0.3s;`}>
+      <h2 style=${() => `margin: 0; color: ${color()};`}>${label}: ${() => value()}</h2>
+    </div>
+  `;
+};
+
+// 3. Main App using "Expression Anchoring"
 const App = () => html`
-  <div style="padding: 2rem; font-family: system-ui, sans-serif;">
-    <h1 style=${style}>Count: ${count}</h1>
+  <div style="padding: 2rem; font-family: system-ui, sans-serif; max-width: 400px;">
     
-    <div style="display: flex; gap: 1rem; align-items: center;">
-      <button 
-        style="padding: 0.6em 1.2em; font-size: 1em; cursor: pointer; border-radius: 8px; border: 1px solid #ccc;"
-        disabled=${() => count() >= 10}
-        onclick=${() => setCount(count() + 1)}
-      >
-        Increment
-      </button>
-      
-      <button
-        style="padding: 0.6em 1.2em; font-size: 1em; cursor: pointer; border-radius: 8px; border: 1px solid #ccc;"
-        onclick=${() => setCount(count() - 1)}
-      >
-        Decrement
-      </button>
+    <${CounterDisplay} ${p({ 
+      label: "Current Count", 
+      value: count 
+    })} />
+
+    <div style="display: flex; gap: 1rem; margin-top: 1rem;">
+      <button onclick=${() => setCount(count() + 1)}>Increment</button>
+      <button onclick=${() => setCount(count() - 1)}>Decrement</button>
     </div>
 
-    <p style="margin-top: 1rem; color: #666;">
-      ${() => count() >= 10 ? 'Maximum reached (10) - Button disabled' : 'Keep clicking!'}
-    </p>
+    <p>${() => count() > 5 ? "🚀 We're flying now!" : "Keep going..."}</p>
   </div>
 `;
 

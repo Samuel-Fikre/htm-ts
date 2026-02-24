@@ -34,6 +34,9 @@ It is a modern, strongly-typed fork of [developit/htm](https://github.com/develo
 4. **Zero-Tooling DX**  
     No Babel, no Vite plugins, no decorators. It runs natively in any modern browser using standard ES Modules.
 
+5. **Expression Anchoring**  
+    Expression Anchoring (Prop Safety) Solved the "Function Tag" type-inference problem. Using the p() helper, component props are strictly validated by TypeScript, preventing runtime errors before they happen.
+
 ---
 
 ## ⚠️ What it is NOT 
@@ -46,25 +49,23 @@ It is a modern, strongly-typed fork of [developit/htm](https://github.com/develo
 
 ## 🛠 Usage
 
-```javascript
-import { html, render, signal } from 'htm-ts';
+import { html, render, signal, p } from 'htm-ts';
 
 const [count, setCount] = signal(0);
 
-// The component runs ONCE. The signals update the DOM surgically.
+// Props are strictly typed
+const Display = ({ value }) => html`<span>Value is: ${value}</span>`;
+
 const App = () => html`
-  <div class="app">
-    <h1 style=${() => ({ color: count() % 2 ? 'red' : 'blue' })}>
-      Count: ${count}
-    </h1>
-    <button onclick=${() => setCount(count() + 1)}>Increment</button>
+  <div>
+    <h1>Count: ${count}</h1>
+    <button onclick=${() => setCount(count() + 1)}>+</button>
+    
+    <${Display} ${p({ value: count() })} />
   </div>
 `;
 
 render(App(), document.body);
-```
-
----
 
 
 ## 🏁 Installation
