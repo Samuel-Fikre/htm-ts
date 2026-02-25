@@ -19,7 +19,7 @@ export type Child =
     | string
     | number
     | VNode
-    | Signal<any>
+    | Signal
     | boolean
     | null
     | undefined;
