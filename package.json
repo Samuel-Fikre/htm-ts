@@ -19,6 +19,7 @@
   "scripts": {
     "build": "tsup",
     "dev": "vite",
+    "example": "vite examples/",
     "typecheck": "tsc --noEmit",
     "test": "vitest --run",
     "test:watch": "vitest --watch",

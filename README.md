@@ -1,72 +1,136 @@
-# htm-ts
+# htm-ts 
 
+**Type-safe, fine-grained surgical reactivity for tagged templates.**
 
-`htm-ts` is a **Surgically Reactive UI Runtime** that brings JSX-like ergonomics to plain JavaScript using Tagged Templates.
-
-It is a modern, strongly-typed fork of [developit/htm](https://github.com/developit/htm), replacing the Virtual DOM approach with a **Fine-Grained Reactive Engine** powered by Signals.
-
----
-
-## ⚖️ How it Compares: `htm` vs. `htm-ts`
-
-| Feature | Original `htm` | **htm-ts** |
-| :--- | :--- | :--- |
-| **Primary Output** | Static VNode Objects | Reactive DOM Instructions |
-| **Reactivity** | External (React/Preact) | **Built-in Signals & Effects** |
-| **Update Strategy** | VDOM Diffing (Top-down) | **Surgical (Direct DOM updates)** |
-| **Performance** | O(VNodes) | **O(Changes)** |
-| **Build Step** | Optional | **Zero (Native ESM)** |
-| **Size** | ~600b (Parser only) | **~2.6KB (Full Runtime)** |
+![Screenshot](./assets/ss1.jpg)
 
 ---
 
-## ✅ What Accomplished
+## Comparison Table
 
-1. **Surgical Reactivity**  
-    Built a runtime where a Signal change bypasses the "Component Function." If a `count` signal updates, `htm-ts` targets the exact text node or attribute in the DOM. No reconciliation, no diffing.
-
-2. **The 2.6KB Runtime**  
-    Packed a full HTML parser, a Signal system, an Effect tracker, and a DOM renderer into a package
-
-3. **The Type-Safe Chassis**  
-    Implemented a tail-recursive type-level parser. It ensures that your template structure is valid and that your Signal-to-Attribute bindings are typed.
-
-4. **Zero-Tooling DX**  
-    No Babel, no Vite plugins, no decorators. It runs natively in any modern browser using standard ES Modules.
-
-5. **Expression Anchoring**  
-    Expression Anchoring (Prop Safety) Solved the "Function Tag" type-inference problem. Using the p() helper, component props are strictly validated by TypeScript, preventing runtime errors before they happen.
+| Feature | `htm` | JSX (Solid) | **htm-ts** |
+| :--- | :--- | :--- | :--- |
+| **No Build Step** | ✅ | ❌ (Requires compiler) | **✅ Native ESM** |
+| **Type-Safe Props** | ❌ | ✅ | **✅ `p()` helper anchor** |
+| **Surgical Updates** | ❌ (VDOM diffing) | ✅ (Fine-grained) | **✅ Signal-driven O(Changes)** |
+| **Bundle Size** | ~600b (parser only) | ~5KB+ (runtime) | **~2.6KB (Full Runtime)** |
 
 ---
 
-## ⚠️ What it is NOT 
+##  The Why: Solving the TypeScript "Black Hole"
 
-* **It is NOT a Compiler:** `htm-ts` parses templates at runtime. This allows for zero-build usage but means we don't have a "pre-compile" step to optimize the strings.
-* **It is NOT an IDE Plugin:** due to TypeScript's current limitation with Tagged Template hole-inference, your IDE will not show red squiggles for a typo like `<divv>` *inside* a template that contains variables.
-* **It is NOT a Framework:** `htm-ts` is just a focused, high-performance UI primitive.
+TypeScript's type inference for tagged template literals has a fundamental limitation: holes (`${...}`) inside templates are typed as the union of all possible interpolated values. When you write `` html`<${Component} name=${value} />` ``, TypeScript sees the Component in a template hole and loses all type information about its props.
+
+**htm-ts solves this** with **Expression Anchoring** via the `p()` helper. By passing props as a separate, explicitly typed object after the component reference, TypeScript can strictly validate prop types at compile time:
+
+```typescript
+const UserCard = ({ name, age }: { name: string; age: number }) => html`
+  <div>${name} - ${age}</div>
+`;
+
+// ✅ Type-safe: TypeScript validates name and age
+html`<${UserCard} ${p({ name: "Sam", age: 25 })} />`;
+
+// ❌ Compile-time error: age must be a number
+html`<${UserCard} ${p({ name: "Sam", age: "twenty-five" })} />`;
+```
 
 ---
 
-## 🛠 Usage
+## 🛠 Basic Usage
 
+```typescript
 import { html, render, signal, p } from 'htm-ts';
 
+// Create reactive state
 const [count, setCount] = signal(0);
 
-// Props are strictly typed
-const Display = ({ value }) => html`<span>Value is: ${value}</span>`;
+// Component functions run ONCE during initial render
+// Subsequent updates are surgical - only the changed text nodes update
+const Display = ({ value }: { value: () => number }) => html`
+  <span>Value is: ${value}</span>
+`;
 
 const App = () => html`
-  <div>
+  <div style="padding: 2rem; font-family: system-ui;">
+    <!-- The h1 and button render once. The ${count} text node updates surgically. -->
     <h1>Count: ${count}</h1>
     <button onclick=${() => setCount(count() + 1)}>+</button>
     
-    <${Display} ${p({ value: count() })} />
+    <!-- Props strictly validated at compile time via p() -->
+    <${Display} ${p({ value: count })} />
   </div>
 `;
 
+// Mount to DOM
 render(App(), document.body);
+```
 
+**Key insight**: Unlike React where components re-run on every state change, `htm-ts` uses Solid's surgical reactivity model. The `App` function executes once during setup. Signal changes bypass component functions entirely and update only the specific DOM nodes that depend on them.
+
+---
+
+## 🏗 Project Structure & Scripts
+
+```
+htm-ts/
+├── src/           # Core library source
+├── test/          # Test suite
+├── examples/      # Runnable examples
+├── dist/          # Build output
+└── README.md      # This file
+```
+
+### Available Scripts
+
+| Script | Command | Description |
+|--------|---------|-------------|
+| `build` | `pnpm build` | Build distribution files |
+| `dev` | `pnpm dev` | Start Vite dev server |
+| `example` | `pnpm example` | Run examples/ demo |
+| `test` | `pnpm test` | Run test suite |
+| `typecheck` | `pnpm typecheck` | Type-check TypeScript |
+
+---
+
+## 🧠 Technical Deep Dive: How It Works
+
+### Tail-Recursive Template Literal Types
+
+The `html` tagged template uses TypeScript's type system as a parser. The `ValidateEach` type recursively walks through template string segments at compile time:
+
+```typescript
+type ValidateEach<T extends readonly string[]> =
+    T extends readonly [infer Head, ...infer Tail]
+    ? Head extends string
+        ? ValidateSegment<Head> extends true
+            ? Tail extends readonly string[] ? ValidateEach<Tail> : true
+            : ValidateSegment<Head>
+        : true
+    : true;
+```
+
+This validates HTML tag names against the `HTMLElements` union, catching typos like `<divv>` at the type level.
+
+### Signal-Aware Runtime
+
+The renderer wraps signal accessors in effects. When a signal updates, only the bound DOM nodes update:
+
+```typescript
+// This runs once during setup, creating a reactive binding
+html`<div>${() => count()}</div>`
+
+// When count() changes, only the text node's data property updates
+// No component re-render, no VDOM diff, no reconciliation
+```
+
+The runtime tracks dependencies via a simple subscription model:
+
+1. **Read phase**: When a signal's getter is called inside an effect, the effect subscribes
+2. **Write phase**: When the signal's setter is called, all subscribers are notified
+3. **Update phase**: Effects re-run, surgically updating only changed DOM attributes/text
+
+---
 
 ## 🏁 Installation
 
